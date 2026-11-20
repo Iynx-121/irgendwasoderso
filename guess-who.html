@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wer ist es? Online</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0b2a6f; --blue:#1459d9; --sky:#4aa3ff; --yellow:#ffc928; --red:#e5384a; --green:#2dbf6a;
+  --paper:#f7f9ff; --ink:#10204a;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:'Fredoka',system-ui,sans-serif;color:var(--ink);
+  background:linear-gradient(180deg,#7cc3ff 0%,#bfe3ff 55%,#5fcf7e 55%,#3fae60 100%);}
+.hidden{display:none!important}
+h1{font-size:clamp(2.6rem,8vw,4.5rem);margin:0;color:#fff;letter-spacing:1px;
+  text-shadow:0 5px 0 var(--navy),0 8px 0 rgba(0,0,0,.15);-webkit-text-stroke:2px var(--navy)}
+h1 b{color:var(--yellow)}
+button{font:inherit;font-weight:600;cursor:pointer;border:0;border-radius:14px;padding:12px 20px;
+  background:var(--yellow);color:var(--navy);box-shadow:0 5px 0 #c99500;transition:transform .08s,box-shadow .08s}
+button:active{transform:translateY(4px);box-shadow:0 1px 0 #c99500}
+button.blue{background:var(--blue);color:#fff;box-shadow:0 5px 0 var(--navy)}
+button.blue:active{box-shadow:0 1px 0 var(--navy)}
+button.green{background:var(--green);color:#fff;box-shadow:0 5px 0 #17803f}
+button.red{background:var(--red);color:#fff;box-shadow:0 5px 0 #9e1d2c}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:3px solid var(--navy);outline-offset:2px}
+input{font:inherit;padding:12px 14px;border-radius:12px;border:3px solid var(--blue);width:100%;background:#fff;color:var(--ink)}
+.panel{background:var(--paper);border:4px solid var(--navy);border-radius:22px;padding:22px;box-shadow:0 8px 0 rgba(11,42,111,.35)}
+.center{display:flex;flex-direction:column;align-items:center;gap:22px;padding:36px 16px}
+.stack{display:flex;flex-direction:column;gap:12px;width:100%}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1}
+#lobby .panel,#room .panel{width:min(440px,100%)}
+.code{font-size:2.8rem;letter-spacing:.35em;text-align:center;color:var(--blue);padding-left:.35em;margin:0}
+.muted{color:#4a5a86;margin:0;font-size:.95rem}
+.err{color:var(--red);min-height:1.2em;margin:0;font-weight:600}
+.players{display:flex;flex-direction:column;gap:8px}
+.pl{display:flex;align-items:center;gap:10px;background:#fff;border:3px solid var(--sky);border-radius:12px;padding:10px 14px}
+.pl i{width:14px;height:14px;border-radius:50%;background:var(--green)}
+.pl.wait i{background:#bbb}
+.pl.wait{opacity:.6;border-style:dashed}
+
+/* game */
+#game{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;padding:16px;max-width:1300px;margin:0 auto}
+@media(max-width:900px){#game{grid-template-columns:1fr}}
+.banner{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--navy);color:#fff;border-radius:16px;padding:10px 18px;font-weight:600}
+.banner .turn{background:var(--yellow);color:var(--navy);padding:6px 14px;border-radius:999px}
+.banner .turn.them{background:#8da7e0}
+.tray{background:var(--blue);border:5px solid var(--navy);border-radius:20px;padding:14px;
+  box-shadow:inset 0 -10px 0 rgba(0,0,0,.2),0 8px 0 rgba(11,42,111,.4)}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:12px}
+.card{perspective:700px;aspect-ratio:3/4.1;cursor:pointer;position:relative;border:0;padding:0;background:none;box-shadow:none;border-radius:10px}
+.card:active{transform:none;box-shadow:none}
+.flip{position:absolute;inset:0;transform-origin:50% 100%;transition:transform .35s cubic-bezier(.3,1.4,.5,1);transform-style:preserve-3d}
+.card.down .flip{transform:rotateX(-82deg)}
+.face{position:absolute;inset:0;background:#fff;border:3px solid var(--navy);border-radius:10px;overflow:hidden;
+  display:flex;flex-direction:column;backface-visibility:hidden}
+.face .pic{flex:1;min-height:0;display:flex;align-items:flex-end;justify-content:center;background:var(--c,#cfe3ff)}
+.face img{width:100%;height:100%;object-fit:cover;display:block}
+.face .sil{width:70%;height:80%;background:rgba(11,42,111,.55);border-radius:50% 50% 8% 8%/45% 45% 8% 8%;margin-bottom:-6%}
+.face .nm{background:var(--navy);color:#fff;text-align:center;font-size:.8rem;padding:4px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card:hover:not(.down) .flip{transform:translateY(-3px)}
+.card.pick .face{box-shadow:0 0 0 4px var(--yellow)}
+.guessing .card:not(.down) .face{animation:pulse 1s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 5px var(--red)}}
+.picking .card:hover .face{box-shadow:0 0 0 4px var(--yellow)}
+.card.mine .face{box-shadow:0 0 0 4px var(--green)}
+@media(prefers-reduced-motion:reduce){.flip{transition:none}.guessing .card .face{animation:none}}
+
+.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.secret{display:flex;gap:12px;align-items:center}
+.secret .card{width:70px;flex:none;cursor:default}
+.log{height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;background:#fff;border:3px solid var(--sky);border-radius:12px;padding:10px}
+.msg{padding:8px 12px;border-radius:12px;max-width:90%;word-break:break-word}
+.msg.me{background:var(--blue);color:#fff;align-self:flex-end}
+.msg.them{background:#e3ecff;align-self:flex-start}
+.msg.sys{background:none;color:#4a5a86;align-self:center;font-size:.85rem;padding:0}
+.ans{font-weight:700}
+.pad{padding:16px}
+
+/* end overlay */
+#end{position:fixed;inset:0;background:rgba(11,42,111,.8);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+#end .panel{text-align:center;max-width:420px;width:100%}
+#end h2{font-size:2.4rem;margin:0 0 6px}
+</style>
+</head>
+<body>
+
+<!-- LOBBY -->
+<div id="lobby" class="center">
+  <h1>Wer ist <b>es?</b></h1>
+  <div class="panel"><div class="stack">
+    <label for="name">Dein Benutzername</label>
+    <input id="name" maxlength="16" placeholder="z. B. QuizMaster" autocomplete="off">
+    <button class="blue" id="btnCreate">Raum erstellen</button>
+    <div class="row">
+      <input id="joinCode" maxlength="5" placeholder="Raumcode" autocomplete="off" style="text-transform:uppercase;letter-spacing:.2em;text-align:center">
+      <button id="btnJoin" style="flex:0 0 auto">Beitreten</button>
+    </div>
+    <button class="green" id="btnBot">Gegen Bot spielen (offline)</button>
+    <p class="muted">Online-Räume brauchen einen normalen Browser-Tab (GitHub Pages oder gespeicherte Datei). Der Bot-Modus geht überall.</p>
+    <p class="err" id="lobbyErr"></p>
+  </div></div>
+</div>
+
+<!-- WAITING ROOM -->
+<div id="room" class="center hidden">
+  <h1>Wer ist <b>es?</b></h1>
+  <div class="panel"><div class="stack">
+    <p class="muted" id="roomHint">Schick diesen Code an deinen Freund</p>
+    <p class="code" id="roomCode">-----</p>
+    <button id="btnCopy">Code kopieren</button>
+    <div class="players" id="players"></div>
+    <button class="green" id="btnStart" disabled>Spiel starten</button>
+    <button class="red" id="btnLeave">Raum verlassen</button>
+  </div></div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="hidden">
+  <div class="banner">
+    <span id="vs"></span>
+    <span class="turn" id="turnTag"></span>
+  </div>
+  <div class="tray"><div class="board" id="board"></div></div>
+  <div class="side">
+    <div class="panel pad secret" id="secretBox">
+      <div class="card mine" id="secretCard"></div>
+      <div><b id="secretTitle">Wähle deine Figur</b><p class="muted" id="secretSub">Klick eine Karte an. Dein Gegner muss sie erraten.</p></div>
+    </div>
+    <div class="panel pad stack">
+      <div class="log" id="log" aria-live="polite"></div>
+      <div id="askBox" class="stack hidden">
+        <input id="q" maxlength="140" placeholder="Stell eine Ja/Nein-Frage…" autocomplete="off">
+        <div class="row">
+          <button class="blue" id="btnAsk">Fragen</button>
+          <button class="red" id="btnGuess">Raten</button>
+        </div>
+      </div>
+      <div id="answerBox" class="row hidden">
+        <button class="green" id="btnYes">Ja</button>
+        <button class="red" id="btnNo">Nein</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- END -->
+<div id="end" class="hidden"><div class="panel stack">
+  <h2 id="endTitle"></h2><p id="endText" class="muted"></p>
+  <div class="card mine" id="endCard" style="width:110px;margin:0 auto;cursor:default"></div>
+  <button class="green" id="btnAgain">Nochmal spielen</button>
+  <button class="red" id="btnExit">Zurück zur Lobby</button>
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>if(typeof Peer==="undefined"){document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');}</script>
+<script>
+/* =========================================================
+   CHARACTERS  – edit this list!
+   name: shown under the card
+   img : path to a png/jpg/webp (e.g. "anna.png"). Leave "" for a silhouette.
+   Put the image files in the same folder as this html file.
+   Both players must use the same list (same file).
+   tags: OPTIONAL list of lowercase words, e.g. tags:["glasses","hat","blonde"].
+         The bot uses them to answer your questions and to ask its own.
+         Without tags the bot still plays, but answers your questions at random.
+   Add or remove as many as you want. EVERY character can be picked as your secret one;
+   during the game each player plays with 20 cards (19 shared random + the opponent's pick).
+   ========================================================= */
+const SHARED_COUNT = 19;  // 19 random cards (same for both) + the opponent's character = 20 cards each
+const CHARACTERS = [
+  {name:"Jason", img:"jason.png"},
+  {name:"Ohhhhh", img:"ohhhhh.png"},
+  {name:"Preshaved It", img:"preshaved-it.png"},
+  {name:"Shelden Kuhpa", img:"shelden-kuhpa.png"},
+  {name:"Petipetapetipeto", img:"petipetapetipeto.png"},
+  {name:"Niger", img:"niger.png"},
+  {name:"Jesus", img:"jesus.png"},
+  {name:"India Man", img:"india-man.png"},
+  {name:"Rectangle", img:"rectangle.png"},
+  {name:"China", img:"china.png"},
+  {name:"Oliver Tree", img:"oliver-tree.png"},
+  {name:"Toilette Kind", img:"toilette-kind.png"},
+  {name:"Huhn", img:"huhn.png"},
+  {name:"Catgirl", img:"catgirl.jpg"},
+  {name:"Gordom Remsi", img:"gordom-remsi.png"},
+  {name:"Till Lindemann", img:"till-lindemann.png"},
+  {name:"Pätrick", img:"pätrick.png"},
+  {name:"Charlie Körk", img:"charlie-körk.png"},
+  {name:"Ogyuno", img:"ogyuno.png"},
+  {name:"Hänry", img:"hänry.jpg"},
+  {name:"Herr Lutschgen", img:"herr-lutschgen.jpg"},
+  {name:"Vinzent", img:"vinzent.png"},
+  {name:"Herrweissweiler", img:"herrweissweiler.jpg"},
+  {name:"Anarschtasios", img:"anarschtasios.png"},
+  {name:"Zeuss", img:"zeuss.jpg"},
+  {name:"Walntin", img:"walntin.jpg"},
+  {name:"Niklas", img:"niklas.png"},
+  {name:"I used to play piano in 1984", img:"l-used-to-play-piano-in-1984.png"},
+  {name:"Head Sheeran", img:"head-sheeran.jpg"},
+  {name:"Ed Sheran", img:"ed-sheran.jpg"},
+  {name:"Kimjongun", img:"kimjongun.jpg"},
+  {name:"Zelensky", img:"zelensky.jpg"},
+  {name:"Netanyahu", img:"netanyahu.jpg"},
+  {name:"Timvollert", img:"timvollert.jpg"},
+  {name:"Kotonoha", img:"kotonoha.jpg"},
+  {name:"Bigmanboobs", img:"bigmanboobs.jpg"},
+  {name:"Adolf", img:"adolf.jpg"},
+  {name:"Chinese Elonmusk", img:"chinese-elonmusk.jpg"},
+  {name:"Markzuckerberg", img:"markzuckerberg.jpg"},
+  {name:"Johnpork", img:"johnpork.jpg"},
+  {name:"Pureauragirl", img:"pureauragirl.jpg"},
+  {name:"Spongebob", img:"spongebob.gif"},
+];
+/* ========================================================= */
+
+const $ = id => document.getElementById(id);
+const PREFIX = "gwho-room-";
+const COLORS = ["#ffd9a8","#c9f0d2","#cfe3ff","#ffc9d3","#e6d4ff","#fff3a8"];
+let peer, conn, isHost = false, myName = "", oppName = "", code = "";
+let board = [], secret = null, oppPick = null, boardSent = false, phase = "lobby", myTurn = false, asking = false, guessMode = false, pendingQ = null;
+
+function show(id){ ["lobby","room","game"].forEach(s => $(s).classList.toggle("hidden", s !== id)); }
+
+/* ---------- connection ---------- */
+function randCode(){ const a="ABCDEFGHJKLMNPQRSTUVWXYZ"; return Array.from({length:5},()=>a[Math.random()*a.length|0]).join(""); }
+function cleanName(){ const n = $("name").value.trim(); if(!n){ $("lobbyErr").textContent="Gib zuerst einen Benutzernamen ein."; $("name").focus(); return null;} return n; }
+
+function needPeer(){
+  if(typeof Peer === "undefined"){ $("lobbyErr").textContent = BLOCKED_MSG; return false; }
+  return true;
+}
+const BLOCKED_MSG = "Keine Verbindung zum Online-Server. Räume gehen nicht in der Claude-Vorschau (sie blockiert Verbindungen nach außen), nur auf GitHub Pages oder als heruntergeladene Datei. Spiel hier gegen den Bot.";
+function failTimer(){ clearTimeout(failTimer.t); failTimer.t = setTimeout(()=>{ $("lobbyErr").textContent = BLOCKED_MSG; }, 6000); }
+function createRoom(tries=0){
+  const n = cleanName(); if(!n) return;
+  if(!needPeer()) return;
+  myName = n; isHost = true; code = randCode(); $("lobbyErr").textContent = "Raum wird erstellt…";
+  failTimer();
+  peer = new Peer(PREFIX + code);
+  peer.on("open", () => {
+    clearTimeout(failTimer.t); $("lobbyErr").textContent = "";
+    $("roomCode").textContent = code; $("roomHint").textContent = "Schick diesen Code an deinen Freund";
+    phase = "room"; renderPlayers(); show("room");
+  });
+  peer.on("connection", c => { if(conn){ c.on("open",()=>c.close()); return; } setupConn(c); });
+  peer.on("error", e => {
+    if(e.type === "unavailable-id" && tries < 4){ peer.destroy(); createRoom(tries+1); }
+    else { clearTimeout(failTimer.t); $("lobbyErr").textContent = ["network","server-error","socket-error","socket-closed"].includes(e.type) ? BLOCKED_MSG : "Raum konnte nicht erstellt werden (" + e.type + ")."; }
+  });
+}
+function joinRoom(){
+  const n = cleanName(); if(!n) return;
+  if(!needPeer()) return;
+  code = $("joinCode").value.trim().toUpperCase();
+  if(code.length !== 5){ $("lobbyErr").textContent = "Raumcodes haben 5 Buchstaben."; return; }
+  myName = n; isHost = false; $("lobbyErr").textContent = "Beitrete…";
+  failTimer();
+  peer = new Peer();
+  peer.on("open", () => setupConn(peer.connect(PREFIX + code, {reliable:true})));
+  peer.on("error", e => {
+    clearTimeout(failTimer.t);
+    $("lobbyErr").textContent = e.type === "peer-unavailable" ? "Raum nicht gefunden. Prüf den Code." : "Verbindungsproblem (" + e.type + ").";
+    if(peer) peer.destroy();
+  });
+}
+function setupConn(c){
+  conn = c;
+  c.on("open", () => { clearTimeout(failTimer.t); send({t:"hello", name:myName}); });
+  c.on("data", onData);
+  c.on("close", () => { if(phase !== "ended") sysLeft(); });
+}
+function send(o){ if(conn && conn.open) conn.send(o); }
+function sysLeft(){
+  if(phase === "lobby" || phase === "room"){ oppName=""; conn=null; renderPlayers(); }
+  else { addMsg("sys", oppName + " hat das Spiel verlassen."); $("askBox").classList.add("hidden"); $("answerBox").classList.add("hidden"); $("turnTag").textContent="Gegner ist weg"; }
+}
+
+function renderPlayers(){
+  $("players").innerHTML =
+    `<div class="pl"><i></i>${esc(myName)} ${isHost?"(Host)":""}</div>` +
+    (oppName ? `<div class="pl"><i></i>${esc(oppName)}</div>` : `<div class="pl wait"><i></i>Warte auf Spieler…</div>`);
+  $("btnStart").disabled = !(isHost && oppName);
+  $("btnStart").classList.toggle("hidden", !isHost);
+  if(!isHost){ $("roomCode").textContent = code; $("roomHint").textContent = "Warte, bis der Host startet…"; }
+}
+function esc(s){ return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* ---------- messages ---------- */
+function onData(m){
+  switch(m.t){
+    case "hello": oppName = m.name; phase = "room"; if(!isHost){ send({t:"hello", name:myName}); show("room"); } renderPlayers(); break;
+    case "start": startGame(m.first === "guest"); break;
+    case "pick": oppPick = m.id; tryBoard(); break;
+    case "board": applyBoard(m.ids); break;
+    case "q": pendingQ = m.text; addMsg("them", m.text); $("answerBox").classList.remove("hidden"); setTurnTag(); break;
+    case "a": addMsg("them", "→ " + m.ans, true); asking = false; myTurn = false; setTurn(); break; // they answer, then it is their turn to ask
+    case "guess": {
+      const ok = m.id === secret;
+      send({t:"result", ok, secret});
+      finish(!ok ? true : false, m.id, secret, true);
+      break; }
+    case "result": finish(m.ok, null, m.secret, false); break;
+    case "again": resetToRoom(); break;
+  }
+}
+
+/* ---------- game flow ---------- */
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.random()*(i+1)|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function makeShared(x, y){
+  return shuffle(CHARACTERS.map((_,i)=>i).filter(i=>i!==x && i!==y)).slice(0, SHARED_COUNT);
+}
+function startGame(iGoFirst){
+  board = CHARACTERS.map((_,i)=>i);
+  phase = "pick"; secret = null; oppPick = null; boardSent = false; myTurn = iGoFirst; asking = false; guessMode = false; pendingQ = null;
+  $("vs").textContent = myName + "  gegen  " + oppName;
+  $("log").innerHTML = ""; $("end").classList.add("hidden");
+  $("secretTitle").textContent = "Wähle deine Figur";
+  $("secretSub").textContent = "Alle " + board.length + " Figuren stehen zur Wahl. Klick eine an. Dein Gegner muss sie erraten.";
+  $("secretCard").innerHTML = "";
+  buildBoard(); $("board").classList.add("picking");
+  show("game"); setTurn();
+  addMsg("sys", "Wähle deine geheime Figur, um zu starten.");
+}
+function tryBoard(){
+  if(secret === null || oppPick === null || boardSent || !isHost) return;
+  boardSent = true;
+  const shared = makeShared(secret, oppPick);
+  send({t:"board", ids: shared}); applyBoard(shared);
+}
+function applyBoard(shared){
+  if(phase !== "pick" && phase !== "wait") return;
+  board = shuffle(shared.concat([oppPick]));   // 19 shared + opponent's character, shuffled
+  phase = "play"; buildBoard(); $("board").classList.remove("picking");
+  addMsg("sys", "Ihr spielt mit " + board.length + " Karten. " + (myTurn ? "Du fragst" : oppName + " fragt") + " zuerst. Klick auf Karten, um sie umzuklappen.");
+  setTurn();
+}
+function buildBoard(){
+  const b = $("board"); b.innerHTML = "";
+  board.forEach(i => {
+    const ch = CHARACTERS[i];
+    const el = document.createElement("button"); el.className = "card"; el.type="button"; el.dataset.i = i;
+    el.innerHTML = faceHTML(ch, i); el.setAttribute("aria-label", ch.name);
+    el.addEventListener("click", () => onCard(i, el));
+    b.appendChild(el);
+  });
+}
+/* If an image doesn't load, try other spellings: l/I at the start, other file endings */
+function imgFallback(el){
+  if(!el._list){
+    const m = el.dataset.src.match(/^(.*)\.([^.]+)$/); const base = m ? m[1] : el.dataset.src;
+    const bases = [base];
+    if(/^[lI]/.test(base)) bases.push((base[0]==="l" ? "I" : "l") + base.slice(1));
+    const exts = ["png","jpg","jpeg","gif","webp","PNG","JPG","JPEG","GIF","WEBP"];
+    el._list = []; bases.forEach(b => exts.forEach(x => el._list.push(b + "." + x)));
+    el._i = 0;
+  }
+  el._i++;
+  if(el._i < el._list.length) el.src = encodeURI(el._list[el._i]);
+  else el.onerror = null;
+}
+function faceHTML(ch,i){
+  const pic = ch.img ? `<img src="${esc(encodeURI(ch.img))}" data-src="${esc(ch.img)}" onerror="imgFallback(this)" alt="" draggable="false">` : `<div class="sil"></div>`;
+  return `<div class="flip"><div class="face"><div class="pic" style="--c:${COLORS[i%COLORS.length]}">${pic}</div><div class="nm">${esc(ch.name)}</div></div></div>`;
+}
+function onCard(i, el){
+  if(phase === "pick"){
+    if(secret !== null) return;
+    if(!confirm(CHARACTERS[i].name + " als deine Figur wählen?")) return;
+    secret = i; $("secretCard").innerHTML = faceHTML(CHARACTERS[i], i);
+    $("secretTitle").textContent = "Deine Figur: " + CHARACTERS[i].name;
+    $("secretSub").textContent = "Halt sie geheim!";
+    phase = "wait"; send({t:"pick", id:i}); setTurnTag(); tryBoard(); return;
+  }
+  if(phase !== "play") return;
+  if(guessMode){
+    if(!confirm(CHARACTERS[i].name + " raten? Wenn es falsch ist, verlierst du.")) return;
+    guessMode = false; $("board").classList.remove("guessing");
+    addMsg("me", "Mein Tipp: " + CHARACTERS[i].name);
+    send({t:"guess", id:i}); return;
+  }
+  el.classList.toggle("down");
+}
+function setTurn(){
+  const askingNow = phase === "play" && myTurn && !pendingQ;
+  $("askBox").classList.toggle("hidden", !askingNow);
+  if(!askingNow){ guessMode = false; $("board").classList.remove("guessing"); $("btnGuess").textContent = "Raten"; }
+  setTurnTag();
+  if(askingNow) $("q").focus();
+}
+function setTurnTag(){
+  const t = $("turnTag"); t.classList.remove("them");
+  if(phase === "pick"){ t.textContent = "Wähle deine Figur"; return; }
+  if(phase === "wait"){ t.textContent = "Warte auf " + oppName + "…"; t.classList.add("them"); return; }
+  if(pendingQ){ t.textContent = "Beantworte die Frage"; return; }
+  if(myTurn){ t.textContent = "Du bist dran: fragen oder raten"; }
+  else { t.textContent = oppName + " überlegt…"; t.classList.add("them"); }
+}
+function ask(){
+  const text = $("q").value.trim(); if(!text || !myTurn || phase !== "play") return;
+  $("q").value = ""; addMsg("me", text); send({t:"q", text});
+  myTurn = false; asking = true; $("askBox").classList.add("hidden"); setTurnTag();
+  $("turnTag").textContent = "Warte auf " + oppName; $("turnTag").classList.add("them");
+}
+function answer(ans){
+  if(!pendingQ) return;
+  addMsg("me", "→ " + ans, true); send({t:"a", ans});
+  pendingQ = null; $("answerBox").classList.add("hidden");
+  myTurn = true; setTurn(); // players alternate: after I answer, I ask next
+}
+function finish(iWon, guessedId, secretOfOther, iWasGuessed){
+  phase = "ended";
+  // iWasGuessed: opponent guessed me. iWon=true means they guessed wrong.
+  // Otherwise: result of my own guess. iWon = whether I was right.
+  let won, other = secretOfOther;
+  if(iWasGuessed){ won = iWon; other = secret; } else { won = iWon; }
+  $("endTitle").textContent = won ? "Du gewinnst!" : "Du verlierst";
+  $("endText").textContent = iWasGuessed
+    ? (won ? oppName + " hat falsch geraten. Deine Figur war:" : oppName + " hat deine Figur erraten:")
+    : (won ? "Du hast die Figur von " + oppName + " gefunden:" : "Falsch geraten. Die Figur von " + oppName + " war:");
+  const ch = CHARACTERS[other]; $("endCard").innerHTML = ch ? faceHTML(ch, other) : "";
+  $("end").classList.remove("hidden");
+}
+function resetToRoom(){
+  phase = "room"; $("end").classList.add("hidden"); renderPlayers(); show("room");
+}
+
+/* ---------- log ---------- */
+function addMsg(kind, text, isAns){
+  const d = document.createElement("div"); d.className = "msg " + kind + (isAns ? " ans" : ""); d.textContent = text;
+  $("log").appendChild(d); $("log").scrollTop = 1e9;
+}
+
+
+/* ---------- bot ---------- */
+let botMode = false, bot = null;
+function startBot(){
+  const n = cleanName(); if(!n) return;
+  myName = n; oppName = "Bot"; botMode = true; isHost = false; $("lobbyErr").textContent = "";
+  conn = {open:true, send:botRecv, close(){}};
+  const first = Math.random() < .5;
+  bot = {secret: Math.random()*CHARACTERS.length|0, cand: [], lastQ:null, first: !first, used:new Set()};
+  startGame(first);
+}
+function botSay(m, d){ setTimeout(()=>{ if(botMode && phase !== "ended") onData(m); }, d || 900 + Math.random()*700); }
+function botRecv(m){
+  if(!botMode) return;
+  if(m.t === "pick"){
+    const shared = makeShared(bot.secret, m.id);
+    bot.cand = shared.concat([m.id]);
+    botSay({t:"pick", id: bot.secret}, 800);
+    botSay({t:"board", ids: shared}, 1300);
+    if(bot.first) setTimeout(botAsk, 3200);
+  }
+  else if(m.t === "q"){ botSay({t:"a", ans: botAnswer(m.text)}); setTimeout(botAsk, 2600); }
+  else if(m.t === "a"){
+    if(bot.lastQ){
+      const yes = m.ans === "Ja", ids = bot.lastQ;
+      bot.cand = bot.cand.filter(i => ids.includes(i) === yes);
+      bot.lastQ = null;
+    }
+  }
+  else if(m.t === "guess"){
+    const ok = m.id === bot.secret; botSay({t:"result", ok, secret: bot.secret}, 500);
+  }
+}
+function botAnswer(q){
+  q = q.toLowerCase(); const sec = CHARACTERS[bot.secret];
+  const names = CHARACTERS.map((c,i)=>[c.name.toLowerCase(),i]).filter(([n])=>q.includes(n));
+  if(names.length) return names.some(([,i])=>i===bot.secret) ? "Ja" : "Nein";
+  const all = [...new Set(CHARACTERS.flatMap(c=>c.tags||[]))];
+  const hit = all.find(t => q.includes(t.toLowerCase()));
+  if(hit) return (sec.tags||[]).includes(hit) ? "Ja" : "Nein";
+  return Math.random() < .5 ? "Ja" : "Nein";
+}
+function botAsk(){
+  if(!botMode || !bot || phase !== "play" || pendingQ || myTurn) return;
+  if(bot.cand.length <= 1){
+    const id = bot.cand.length ? bot.cand[0] : board[Math.random()*board.length|0];
+    botSay({t:"guess", id}, 800); return;
+  }
+  const tags = [...new Set(bot.cand.flatMap(i=>CHARACTERS[i].tags||[]))].filter(t=>!bot.used.has(t));
+  let ids, text;
+  if(tags.length){
+    let best = tags[0], bd = 1e9;
+    tags.forEach(t => { const c = bot.cand.filter(i=>(CHARACTERS[i].tags||[]).includes(t)).length; const d = Math.abs(c - bot.cand.length/2); if(d < bd){bd=d;best=t;} });
+    bot.used.add(best);
+    ids = bot.cand.filter(i=>(CHARACTERS[i].tags||[]).includes(best));
+    if(!ids.length || ids.length === bot.cand.length){ return botAsk(); }
+    text = "Passt das auf deine Figur: " + best + "?";
+  } else {
+    const half = bot.cand.slice(0, Math.ceil(bot.cand.length/2));
+    ids = half; text = "Ist deine Figur eine von diesen: " + half.map(i=>CHARACTERS[i].name).join(", ") + "?";
+  }
+  bot.lastQ = ids;
+  botSay({t:"q", text}, 700);
+}
+
+/* ---------- wiring ---------- */
+$("btnCreate").onclick = () => createRoom();
+$("btnBot").onclick = startBot;
+$("btnJoin").onclick = joinRoom;
+$("joinCode").addEventListener("keydown", e => { if(e.key === "Enter") joinRoom(); });
+$("btnCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(code); $("btnCopy").textContent = "Kopiert!"; setTimeout(()=>$("btnCopy").textContent="Code kopieren",1200); };
+$("btnStart").onclick = () => { const first = Math.random() < .5 ? "host" : "guest"; send({t:"start", first}); startGame(first === "host"); };
+$("btnLeave").onclick = $("btnExit").onclick = () => { botMode=false; if(conn) conn.close(); if(peer) peer.destroy(); conn=null; peer=null; oppName=""; phase="lobby"; $("end").classList.add("hidden"); show("lobby"); };
+$("btnAsk").onclick = ask;
+$("q").addEventListener("keydown", e => { if(e.key === "Enter") ask(); });
+$("btnYes").onclick = () => answer("Ja");
+$("btnNo").onclick = () => answer("Nein");
+$("btnGuess").onclick = () => {
+  guessMode = !guessMode; $("board").classList.toggle("guessing", guessMode);
+  $("btnGuess").textContent = guessMode ? "Abbrechen" : "Raten";
+  if(guessMode) addMsg("sys", "Klick auf die Figur, die du für richtig hältst.");
+};
+$("btnAgain").onclick = () => { if(botMode){ $("end").classList.add("hidden"); startBot(); return; } send({t:"again"}); resetToRoom(); };
+</script>
+</body>
+</html>
